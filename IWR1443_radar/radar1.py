@@ -91,24 +91,23 @@ n_targets = [len(targets_list[i]) for i in range(len(targets_list))]
 max_n_targets = max(n_targets)
 
 # create the mask (False corresponds to valid target)
-mask = np.array([[i >= n_targets[j] for i in range(max_n_targets)] for j in range(n_frames)])
-mask = np.tile(np.reshape(mask, mask.shape + (1,)), (1, 1, 2))
+targets_mask = np.array([[[i >= n_targets[j]]*2 for i in range(max_n_targets)] for j in range(n_frames)])
 
 # nd array of all the x & y components of the targets in every frame
-targets_array = np.zeros((n_frames,max_n_targets,2))
+targets_array = np.zeros(targets_mask.shape)
 for i in range(n_frames):
     for tar_j in range(len(targets_list[i])):
         targets_array[i,tar_j,:] = np.array([getattr(targets_list[i][tar_j],coor) for coor in ["x","y"]])
 
 # mask the array according to valid targets
-targets_array = ma.masked_array(targets_array, mask)
+targets_array = ma.array(targets_array, mask=targets_mask)
 
 # make another array which can be referenced by the coordinate string
-targets_array2 = np.ma.zeros((n_frames, max_n_targets), dtype=[('x', float, (1,)), ('y', float, (1,))])
+targets_array2 = ma.zeros((n_frames, max_n_targets), dtype=[('x', float, (1,)), ('y', float, (1,))])
 targets_array2['x'] = targets_array[:,:,0:1]
 targets_array2['y'] = targets_array[:,:,1:]
 
-centroids = np.ma.mean(targets_array, axis=1)
+centroids = ma.mean(targets_array, axis=1)
 
 fig = plt.figure()
 ax = fig.add_axes([0, 0, 1, 1])
@@ -121,7 +120,7 @@ scat = ax.scatter(np.zeros(max_n_targets), np.zeros(max_n_targets), marker='o')
 
 def update(i):
 
-    offsets = np.ma.vstack((targets_array[i,:,:], centroids[i,:]))
+    offsets = ma.vstack((targets_array[i,:,:], centroids[i,:]))
     scat.set_offsets(offsets)
     scat.set_facecolors(['b']*(np.shape(offsets)[0] - 1) + ['r'])
     return
@@ -131,4 +130,4 @@ animation = FuncAnimation(fig, update, frames=n_frames, interval=200, repeat=Tru
 plt.show()
 
 
-print(len(frames))
+print("done")
