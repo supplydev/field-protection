@@ -100,7 +100,7 @@ def parse_config_file(config_file_name):
 # ------------------------------------------------------------------
 
 # Function to read and parse the incoming data
-def readAndParseData14xx(Dataport, config_parameters):
+def read_and_parse_data_14xx(Dataport, config_parameters):
     global byte_buffer, byte_buffer_length
 
     # Constants
@@ -280,13 +280,13 @@ def update(config_parameters):
     y = []
 
     # Read and parse the received data
-    data_ok, frame_number, det_obj = readAndParseData14xx(Dataport, config_parameters)
+    data_ok, frame_number, det_obj = read_and_parse_data_14xx(Dataport, config_parameters)
 
     if data_ok:
         # print(det_obj)
         x = -det_obj["x"]
         y = det_obj["y"]
-    print(f'x and y are {x} and {y}')
+        print(f'x: {x}, y: {y}')
     # s.setData(x,y)
     # QtGui.QApplication.processEvents()
 
@@ -325,7 +325,7 @@ def main():
             data_ok = update(config_parameters)
 
             if data_ok:
-                # Store the current frame into frameData
+                # Store the current frame into frame_data
                 frame_data[current_index] = det_obj
                 current_index += 1
                 print(f'Current index = {current_index}')
