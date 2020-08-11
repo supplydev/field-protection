@@ -2,17 +2,28 @@ import serial
 import time
 import numpy as np
 
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+import threading
+from sklearn.cluster import MeanShift
+
 # import pyqtgraph as pg
 # from pyqtgraph.Qt import QtGui
 
 # Change the configuration file name
-CONFIG_FILE_NAME = 'profile2_091319.cfg'
+CONFIG_FILE_NAME = '1443_3d.cfg'
+#CONFIG_FILE_NAME = '1443config.cfg'
 
 CLIport = {}
 Dataport = {}
 byte_buffer = np.zeros(2 ** 15, dtype='uint8')
 byte_buffer_length = 0
 
+graph_pts = [[], []]
+centroids = [[], []]
+fig = plt.figure()
+ax1 = fig.add_subplot(1,1,1)
 
 # ------------------------------------------------------------------
 
@@ -125,7 +136,6 @@ def read_and_parse_data_14xx(Dataport, config_parameters):
     if (byte_buffer_length + byte_count) < max_buffer_size:
         byte_buffer[byte_buffer_length:byte_buffer_length + byte_count] = byte_vec[:byte_count]
         byte_buffer_length += byte_count
-
     # Check that the buffer has some data
     if byte_buffer_length > 16:
 
@@ -141,7 +151,6 @@ def read_and_parse_data_14xx(Dataport, config_parameters):
 
         # Check that start_idx is not empty
         if start_idx:
-
             # Remove the data before the first start index
             if start_idx[0] > 0:
                 byte_buffer[:byte_buffer_length - start_idx[0]] = byte_buffer[start_idx[0]:byte_buffer_length]
@@ -251,8 +260,6 @@ def read_and_parse_data_14xx(Dataport, config_parameters):
 
                 data_ok = 1
 
-                print(det_obj['range'].mean())
-
             elif tlv_type == MMWDEMO_UART_MSG_RANGE_PROFILE:
                 idX += tlv_length
 
@@ -266,6 +273,10 @@ def read_and_parse_data_14xx(Dataport, config_parameters):
             # Check that there are no errors with the buffer length
             if byte_buffer_length < 0:
                 byte_buffer_length = 0
+        
+    if not data_ok:
+        byte_buffer = np.zeros(2 ** 15, dtype='uint8')
+        byte_buffer_length = 0
 
     return data_ok, frame_number, det_obj
 
@@ -275,32 +286,56 @@ def read_and_parse_data_14xx(Dataport, config_parameters):
 # Function to update the data and display in the plot
 def update(config_parameters):
     data_ok = 0
-    global det_obj
+    global det_obj, graph_pts, centroids
     x = []
     y = []
+    z = []
 
-    # Read and parse the received data
-    data_ok, frame_number, det_obj = read_and_parse_data_14xx(Dataport, config_parameters)
-
-    if data_ok:
-        # print(det_obj)
-        x = -det_obj["x"]
-        y = det_obj["y"]
-        print(f'x: {x}, y: {y}')
+    # collect data
+    num_samples = 2
+    retry = 10
+    X = np.array([])
+    while num_samples > 0 and retry >= 0:
+        try:
+            # Read and parse the received data
+            data_ok, frame_number, det_obj = read_and_parse_data_14xx(Dataport, config_parameters)
+            if data_ok:
+                num_samples -= 1
+                # print(det_obj)
+                x = -det_obj["x"]
+                y = det_obj["y"]
+                z = det_obj["z"]
+                ran = det_obj["range"]
+                for i, r in enumerate(ran):
+                    pass
+                    if y[i] < 1:
+                        if X.shape[0] == 0:
+                            X = np.array([[x[i], z[i]]])
+                        else:
+                            X = np.append(X, [[x[i], z[i]]], axis=0)
+            else:
+                retry -= 1
+            time.sleep(0.2)
+        except Exception:
+            time.sleep(0.2)
+            retry -= 1
+    if X.shape[0] > 0:
+        clusters = MeanShift(bandwidth=0.25).fit(X)
+        centroids = clusters.cluster_centers_
+        # graph_pts = np.swapaxes(X, 0, 1)
+        # centroids = np.swapaxes(pts,0,1)
+    else:
+        graph_pts = [[], []]
+        centroids = [[], []]
     # s.setData(x,y)
     # QtGui.QApplication.processEvents()
+    print(centroids)
 
     return data_ok
 
 
 # -------------------------    MAIN   -----------------------------------------
 def main():
-    # Configurate the serial port
-    CLIport, Dataport = serial_config(CONFIG_FILE_NAME)
-
-    # Get the configuration parameters from the configuration file
-    config_parameters = parse_config_file(CONFIG_FILE_NAME)
-
     # START QtAPP for the plot
     # app = QtGui.QApplication([])
 
@@ -314,8 +349,27 @@ def main():
     # p.setLabel('bottom', text= 'X position (m)')
     # s = p.plot([],[],pen=None,symbol='o')
 
-
     # Main loop
+    # thread = threading.Thread(target=background_update, args=(), daemon=False)
+    # thread.start()
+
+    # ani = animation.FuncAnimation(fig, update_graph, interval=50)
+    # plt.show()
+    background_update()
+
+def update_graph(i):
+    ax1.clear()
+    ax1.set_xlim(-2, 2)
+    ax1.set_ylim(-1, 1)
+    ax1.plot(graph_pts[0], graph_pts[1], 'bo')
+    ax1.plot(centroids[0], centroids[1], 'ro')
+
+def background_update():
+    CLIport, Dataport = serial_config(CONFIG_FILE_NAME)
+
+    # Get the configuration parameters from the configuration file
+    config_parameters = parse_config_file(CONFIG_FILE_NAME)
+
     det_obj = {}
     frame_data = {}
     current_index = 0
@@ -328,7 +382,7 @@ def main():
                 # Store the current frame into frame_data
                 frame_data[current_index] = det_obj
                 current_index += 1
-                print(f'Current index = {current_index}')
+                # print(f'Current index = {current_index}')
 
             time.sleep(0.2)  # Sampling frequency of ___
 
@@ -338,7 +392,6 @@ def main():
             CLIport.close()
             Dataport.close()
             break
-
 
 if __name__ == '__main__':
     main()
